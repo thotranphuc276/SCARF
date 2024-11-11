@@ -51,3 +51,5 @@ exps
 wandb
 process_data/assets
 debug*
+
+.idea
