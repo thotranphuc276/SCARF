@@ -44,10 +44,10 @@ class DeRF(nn.Module):
 
     def forward(self, xyz, deformation_code=None):
         xyz_encoded = self.encoding_xyz(xyz)
-        
+
         if self.deformation_dim > 0:
             xyz_encoded = torch.cat([xyz_encoded, deformation_code], -1)
-        
+
         xyz_ = xyz_encoded
         for i in range(self.D):
             if i in self.skips:
@@ -124,7 +124,7 @@ class NeRF(nn.Module):
         self.sigma = nn.Linear(W, 1)
         self.rgb = nn.Sequential(
                         nn.Linear(W//2, 3),
-                        nn.Sigmoid())
+                        nn.GELU())
 
     def forward(self, xyz, viewdir=None, deformation_code=None, appearance_code=None):
         """
@@ -155,7 +155,7 @@ class NeRF(nn.Module):
     def get_sigma(self, xyz, deformation_code=None, only_sigma=False):
 
         xyz_encoded = self.encoding_xyz(xyz)
-        
+
         if self.deformation_dim > 0:
             xyz_encoded = torch.cat([xyz_encoded, deformation_code], -1)
 
@@ -169,7 +169,7 @@ class NeRF(nn.Module):
 
         if only_sigma:
             return sigma
-        
+
         xyz_encoding_final = self.xyz_encoding_final(xyz_)
 
         return sigma, xyz_encoding_final
@@ -193,8 +193,8 @@ class NeRF(nn.Module):
 ####
 
 class MLP(nn.Module):
-    def __init__(self, 
-                 filter_channels, 
+    def __init__(self,
+                 filter_channels,
                  merge_layer=0,
                  res_layers=[],
                  norm='group',
@@ -251,7 +251,7 @@ class MLP(nn.Module):
                 if self.norm not in ['batch', 'group']:
                     y = F.leaky_relu(y)
                 else:
-                    y = F.leaky_relu(self.norms[i](y))         
+                    y = F.leaky_relu(self.norms[i](y))
             if i == self.merge_layer:
                 phi = y.clone()
 
@@ -281,7 +281,7 @@ class GeoMLP(nn.Module):
         filter_channels = [self.embedding_dim + cond_dim] + filter_channels + [output_dim]
         self.mlp = MLP(filter_channels, last_op=last_op)
         self.scale = scale
-        
+
     def forward(self, x, cond):
         """
         Encodes input (xyz+dir) to rgb+sigma (not ready to render yet).

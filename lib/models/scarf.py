@@ -11,6 +11,8 @@ from pytorch3d.renderer import (
 )
 from pytorch3d.io import load_obj
 from pytorch3d.ops.knn import knn_points
+
+from .ngp import NGPNet
 from .smplx import SMPLX
 from ..utils.volumetric_rendering import fancy_integration, perturb_points, sample_pdf
 from ..utils.rasterize_rendering import pytorch3d_rasterize, render_shape
@@ -69,6 +71,9 @@ class SCARF(nn.Module):
             self.cond_dim = 1
             self.mlp_geo = GeoSIREN(input_dim=3, z_dim=self.cond_dim, hidden_dim=128, output_dim=3, device=self.device, last_op=torch.tanh, scale=self.cfg.mesh_offset_scale)
             self.mlp_tex = GeoSIREN(input_dim=3, z_dim=self.cond_dim, hidden_dim=128, output_dim=3, device=self.device, last_op=torch.nn.GELU(), scale=1)
+            self.mlp_geo = init_aabb = [-1., -1., -1., 1., 1., 1.]
+            self.geo_model = NGPNet(aabb=init_aabb, input_dim=3, cond_dim=self.cond_dim, output_dim=3, last_op=torch.tanh, scale=self.cfg.mesh_offset_scale,
+                                    log2_hashmap_size=8, n_levels=8)
             # setup renderer for mesh
             self._setup_render()
 
