@@ -21,7 +21,7 @@ from .siren import GeoSIREN
 
 def smplx_lbsmap_top_k(lbs_weights, verts_transform, points, template_points, source_points=None, K=1, addition_info=None):
     '''ref: https://github.com/JanaldoChen/Anim-NeRF
-    Args:  
+    Args:
     '''
     bz, np, _ = points.shape
     with torch.no_grad():
@@ -44,7 +44,7 @@ def smplx_lbsmap_top_k(lbs_weights, verts_transform, points, template_points, so
 
     if addition_info is not None: #[bz, nv, 3]
         xyz_neighbs_info = util.batch_index_select(addition_info, neighbs)
-        xyz_info = torch.sum(xyz_neighbs_weight.unsqueeze(-1)* xyz_neighbs_info, dim=2) 
+        xyz_info = torch.sum(xyz_neighbs_weight.unsqueeze(-1)* xyz_neighbs_info, dim=2)
         return xyz_dist, xyz_transform, xyz_info
     else:
         return xyz_dist, xyz_transform
@@ -55,7 +55,7 @@ class SCARF(nn.Module):
         self.cfg = cfg
         self.device = device
         self.image_size = self.cfg.dataset.image_size
-        
+
         ## set smplx model
         self.set_smplx()
         if init_beta is None:
@@ -68,7 +68,7 @@ class SCARF(nn.Module):
         if self.cfg.use_mesh: # hybrid: mesh as inside
             self.cond_dim = 1
             self.mlp_geo = GeoSIREN(input_dim=3, z_dim=self.cond_dim, hidden_dim=128, output_dim=3, device=self.device, last_op=torch.tanh, scale=self.cfg.mesh_offset_scale)
-            self.mlp_tex = GeoSIREN(input_dim=3, z_dim=self.cond_dim, hidden_dim=128, output_dim=3, device=self.device, last_op=torch.sigmoid, scale=1)
+            self.mlp_tex = GeoSIREN(input_dim=3, z_dim=self.cond_dim, hidden_dim=128, output_dim=3, device=self.device, last_op=torch.nn.GELU(), scale=1)
             # setup renderer for mesh
             self._setup_render()
 
@@ -116,10 +116,10 @@ class SCARF(nn.Module):
         all_idx = range(xyz_c.shape[1])
         face_idx = list(flame_vertex_mask['face'])
         body_idx = [i for i in all_idx if i not in face_idx]
-                
+
         self.part_idx_dict = {
             'face': flame_vertex_mask['face'],
-            'hand': list(hand_idx['left_hand']) + list(hand_idx['right_hand']), 
+            'hand': list(hand_idx['left_hand']) + list(hand_idx['right_hand']),
             'exclude': exclude_idx,
             'body': body_idx
         }
@@ -148,7 +148,7 @@ class SCARF(nn.Module):
             b_coords = torch.from_numpy(b_coords).to(self.device)
             subdiv_verts = self.smplx_verts[self.smplx_faces[nearest_faces,0]]*b_coords[:,0:1] + self.smplx_verts[self.smplx_faces[nearest_faces,1]]*b_coords[:,1:2] + self.smplx_verts[self.smplx_faces[nearest_faces,2]]*b_coords[:,2:]
             self.verts = subdiv_verts.squeeze().float()
-            self.faces = faces_idx.verts_idx.squeeze().to(self.device)            
+            self.faces = faces_idx.verts_idx.squeeze().to(self.device)
             self.b_coords = b_coords.float()
             ## face and hands index of high res version
             for key in self.part_idx_dict.keys():
@@ -173,7 +173,7 @@ class SCARF(nn.Module):
         self.canonical_cam = torch.tensor([[1., 0., 0.28]]).float().to(self.device)
         if self.cfg.use_perspective:
             self.canonical_cam = torch.tensor([[46.6029,  0.0747,  0.3319, 47.1121]]).float().to(self.device)
-            
+
     def _setup_render(self):
         ## camera
         R = torch.eye(3).unsqueeze(0)
@@ -181,23 +181,23 @@ class SCARF(nn.Module):
         batch_size = 1
         self.cameras = pytorch3d.renderer.cameras.FoVOrthographicCameras(
                     R=R.expand(batch_size, -1, -1), T=T.expand(batch_size, -1), znear=0.0).to(self.device)
-        
+
         blend_params = BlendParams(sigma=1e-7, gamma=1e-4)
         raster_settings = RasterizationSettings(
-            image_size=self.image_size, 
-            blur_radius=np.log(1. / 1e-4 - 1.) * blend_params.sigma, 
-            faces_per_pixel=50, 
+            image_size=self.image_size,
+            blur_radius=np.log(1. / 1e-4 - 1.) * blend_params.sigma,
+            faces_per_pixel=50,
             bin_size = 0
             )
-        # Create a silhouette mesh renderer by composing a rasterizer and a shader. 
+        # Create a silhouette mesh renderer by composing a rasterizer and a shader.
         self.silhouette_renderer = MeshRenderer(
             rasterizer=MeshRasterizer(
-                cameras=self.cameras, 
+                cameras=self.cameras,
                 raster_settings=raster_settings
             ),
             shader=SoftSilhouetteShader(blend_params=blend_params)
         )
-    
+
     def fixed_rays(self):
         # generat rays
         height, width = self.image_size, self.image_size
@@ -215,8 +215,8 @@ class SCARF(nn.Module):
         center = torch.stack((X,Y,Z), dim=-1)[None,...]
         direction = torch.tensor([0,0,1.], device=self.device)[None,None,None,:].repeat(1,height, width,1)
         near = torch.ones_like(X)[None,:,:,None]*near
-        far = torch.ones_like(X)[None,:,:,None]*far 
-        pixel_rays = torch.cat([center, direction, near, far], dim=-1) 
+        far = torch.ones_like(X)[None,:,:,None]*far
+        pixel_rays = torch.cat([center, direction, near, far], dim=-1)
         return pixel_rays
 
     @torch.no_grad()
@@ -226,10 +226,10 @@ class SCARF(nn.Module):
         batch_size = batch['cam'].shape[0]
         with torch.no_grad():
             ## random rays for each image
-            rays = self.pixel_rays.expand(batch_size, -1, -1, -1)            
+            rays = self.pixel_rays.expand(batch_size, -1, -1, -1)
             if self.cfg.use_mesh:
                 vis_image = batch['vis_image'].detach()
-                depth_image = batch['depth_image'].detach().squeeze() 
+                depth_image = batch['depth_image'].detach().squeeze()
                 far = depth_image + self.cfg.depth_std
                 vis = vis_image.clone().squeeze(1)
                 rays = rays.clone()
@@ -242,14 +242,14 @@ class SCARF(nn.Module):
                     dW = int(W//2 * self.cfg.train.precrop_frac)
                     coords = torch.stack(
                         torch.meshgrid(
-                            torch.linspace(H//2 - dH, H//2 + dH - 1, 2*dH), 
+                            torch.linspace(H//2 - dH, H//2 + dH - 1, 2*dH),
                             torch.linspace(W//2 - dW, W//2 + dW - 1, 2*dW)
                         ), -1)
                 else:
-                    coords = torch.stack(torch.meshgrid(torch.linspace(0, self.image_size-1, self.image_size), torch.linspace(0, self.image_size-1, self.image_size)), -1)  
+                    coords = torch.stack(torch.meshgrid(torch.linspace(0, self.image_size-1, self.image_size), torch.linspace(0, self.image_size-1, self.image_size)), -1)
                 n_rays = self.cfg.chunk
                 coords = torch.reshape(coords, [-1,2]).long().to(self.device)
-                # 
+                #
                 select_inds = torch.randperm(coords.shape[0])[:n_rays]
                 coords = coords[select_inds]
                 if self.cfg.sample_patch_rays:
@@ -267,7 +267,7 @@ class SCARF(nn.Module):
                     coords[:self.cfg.sample_patch_size**2] = inds
                     #
                 rays = rays[:,coords[:,0], coords[:,1]]
-                ## train, sample corresponding gt 
+                ## train, sample corresponding gt
                 for key in ['image', 'mesh_mask', 'cloth_mask', 'mesh_image', 'mask', 'shape_image']:
                     if key in batch.keys():
                         gts = batch[key].permute(0,2,3,1)
@@ -282,7 +282,7 @@ class SCARF(nn.Module):
                         batch[f'{key}_sampled'] = gts_sampled
 
         return rays
-    
+
     @torch.no_grad()
     def sample_points(self, rays, perturb=False, z_coarse=None, weights=None, combine=True):
         batch_size = rays.shape[0]
@@ -308,12 +308,12 @@ class SCARF(nn.Module):
                 z_vals, _ = torch.sort(z_vals, dim=-1)
             z_vals = z_vals.reshape(rays.shape[0], rays.shape[1], -1, 1)
             xyz = center[:,:,None,:] + z_vals * direction[:,:,None,:]
-        
+
         xyz = xyz.view(batch_size, -1, 3)
         ## note: viewdir not used
         viewdir = direction.view(batch_size, -1, 3)
         return xyz, viewdir, z_vals
-    
+
     def cam_project(self, points, cam, inv=False):
         if self.cfg.cam_mode == 'orth':
             if inv:
@@ -335,7 +335,7 @@ class SCARF(nn.Module):
         d_xyz = d_xyz*0.001
         xyz_deformed = xyz + d_xyz
         return xyz_deformed, d_xyz
-    
+
     def backward_skinning(self, batch, xyz, viewdir):
         '''
             xyz: [B, n_ray, n_point, 3]
@@ -343,11 +343,11 @@ class SCARF(nn.Module):
         batch_size, n_sample,  _ = xyz.shape
         cam = batch['cam']
 
-        #-- backward skinning based on knn 
+        #-- backward skinning based on knn
         posed_verts, _, _, joints_transform, curr_vertices_transform, shape_offsets, pose_offsets = \
                 self.smplx(full_pose=batch['full_pose'], shape_params=self.beta.expand(batch_size, -1), transl=batch.get('transl', torch.zeros([batch_size, 3], device=xyz.device)), return_T=True)
         curr_offsets = shape_offsets + pose_offsets
-        ## inverse transofrm: 
+        ## inverse transofrm:
         # posed -> mean shape -> canonical
         xyz = self.cam_project(xyz, cam, inv=True)
         vertices_transform = torch.inverse(curr_vertices_transform)
@@ -366,18 +366,18 @@ class SCARF(nn.Module):
                 vertices_transform[:,:,:3,3] = vertices_transform[:,:,:3,3] - offset
             lbs_weights = (util.batch_index_select(self.smplx.lbs_weights[None,...], verts_index)*self.b_coords[None, :,:,None]).sum(2).squeeze()
         else:
-            lbs_weights = self.smplx.lbs_weights   
-        
+            lbs_weights = self.smplx.lbs_weights
+
         surface_verts = posed_verts
         if (self.cfg.use_deformation and self.cfg.deformation_type == 'posed_verts'):
-            xyz_dist, xyz_transform, xyz_posed_verts = smplx_lbsmap_top_k(lbs_weights, vertices_transform, 
+            xyz_dist, xyz_transform, xyz_posed_verts = smplx_lbsmap_top_k(lbs_weights, vertices_transform,
                                     xyz, surface_verts, K=self.cfg.k_neigh,
                                     addition_info=posed_verts)
             batch['deformation_code'] = xyz_posed_verts.detach()
         else:
-            xyz_dist, xyz_transform = smplx_lbsmap_top_k(lbs_weights, vertices_transform, 
+            xyz_dist, xyz_transform = smplx_lbsmap_top_k(lbs_weights, vertices_transform,
                                     xyz, surface_verts, K=self.cfg.k_neigh)
-        
+
         xyz = util.batch_transform(xyz_transform, xyz)
         xyz_valid = torch.lt(xyz_dist, self.cfg.dis_threshold).float().squeeze()
         valid = xyz_valid.reshape(batch_size, self.cfg.chunk, -1, 1)
@@ -386,7 +386,7 @@ class SCARF(nn.Module):
             batch['d_xyz'] = d_xyz
         return xyz, viewdir, valid
 
-    def query_canonical_space(self, xyz, viewdir=None, use_fine=False, only_sigma=False, only_normal=False, 
+    def query_canonical_space(self, xyz, viewdir=None, use_fine=False, only_sigma=False, only_normal=False,
                                 deformation_code=None):
         deformation_code = None
         if only_sigma:
@@ -407,7 +407,7 @@ class SCARF(nn.Module):
             rgb, sigma = self.nerf_fine(xyz, viewdir=viewdir, deformation_code=deformation_code)
 
         return rgb, sigma
-    
+
     def query_model(self, batch, rays, xyz, viewdir, z_vals, noise_std, use_fine=False, render_cloth=False, with_shape=False, get_normal=False):
         ## backward skinning
         xyz, viewdir, valid = self.backward_skinning(batch, xyz, viewdir)
@@ -416,9 +416,9 @@ class SCARF(nn.Module):
             sigma =  self.query_canonical_space(xyz, use_fine=True, only_sigma=True)
             sigma = sigma.reshape(rays.shape[0], rays.shape[1], -1, 1)
             normal = normal.reshape(rays.shape[0], rays.shape[1], -1, 3)
-            normals, _, _ = fancy_integration(torch.cat([normal, sigma], dim=-1), z_vals, device=self.device, white_back=self.cfg.dataset.white_bg, 
-                        last_back=self.cfg.use_mesh, clamp_mode='relu', noise_std=noise_std)     
-            return normals   
+            normals, _, _ = fancy_integration(torch.cat([normal, sigma], dim=-1), z_vals, device=self.device, white_back=self.cfg.dataset.white_bg,
+                        last_back=self.cfg.use_mesh, clamp_mode='relu', noise_std=noise_std)
+            return normals
         ## query nerf mlp
         rgb, sigma = self.query_canonical_space(xyz, viewdir, use_fine=use_fine)
         rgb = rgb.reshape(rays.shape[0], rays.shape[1], -1, 3)
@@ -432,8 +432,8 @@ class SCARF(nn.Module):
                     rgb = torch.cat([rgb[:,:,:-1,:3].clone(), batch['shape_image_sampled'][:,:,None,:]], dim=2)
                 else:
                     rgb[:,:,-1,:3] = 1.
-        rgbs, depths, weights = fancy_integration(torch.cat([rgb, sigma], dim=-1), z_vals, device=self.device, white_back=self.cfg.dataset.white_bg, 
-                        last_back=self.cfg.use_mesh, clamp_mode='relu', noise_std=noise_std)        
+        rgbs, depths, weights = fancy_integration(torch.cat([rgb, sigma], dim=-1), z_vals, device=self.device, white_back=self.cfg.dataset.white_bg,
+                        last_back=self.cfg.use_mesh, clamp_mode='relu', noise_std=noise_std)
         alphas = torch.sum(weights[...,:-1], dim=-1, keepdim=True)
         output = {
             'rgbs': rgbs,
@@ -469,7 +469,7 @@ class SCARF(nn.Module):
                 for key in fine_output:
                     output[f'{key}_fine'] = fine_output[key]
         return output
-    
+
     def forward_mesh(self, batch, returnVerts=False, renderShape=False, renderDepth=False, background=None, clean_offset=False):
         batch_size = batch['cam'].shape[0]
         output = {}
@@ -492,9 +492,9 @@ class SCARF(nn.Module):
         if self.cfg.use_highres_smplx:
             canonical_vert_pos = self.verts[None,...]+offset
             posed_verts, _, _, joints_transform, curr_vertices_transform, shape_offsets, pose_offsets = \
-                    self.smplx(full_pose=batch['full_pose'], shape_params=self.beta.expand(batch_size, -1), 
-                                transl=batch.get('transl', torch.zeros([batch_size, 3], device=self.device)), 
-                                expression_params=batch.get('exp', torch.zeros([batch_size, 10], device=self.device)), 
+                    self.smplx(full_pose=batch['full_pose'], shape_params=self.beta.expand(batch_size, -1),
+                                transl=batch.get('transl', torch.zeros([batch_size, 3], device=self.device)),
+                                expression_params=batch.get('exp', torch.zeros([batch_size, 10], device=self.device)),
                                 return_T=True)
             curr_offsets = shape_offsets + pose_offsets
             # canonical -> mean shape -> posed
@@ -515,7 +515,7 @@ class SCARF(nn.Module):
                 output['posed_verts_outer'] = posed_verts_outer
                 trans_verts_outer = self.cam_project(posed_verts_outer, batch['cam'])
                 output['offset_outer'] = offset_outer
-        else:        
+        else:
             posed_verts, _, _, = \
                     self.smplx(full_pose=batch['full_pose'], shape_params=self.beta.expand(batch_size, -1), transl=batch.get('transl', torch.zeros([batch_size, 3], device=self.device)), offset=offset)
         trans_verts = self.cam_project(posed_verts, batch['cam'])
@@ -527,24 +527,24 @@ class SCARF(nn.Module):
         if returnVerts:
             return output
         if renderShape:
-            shape_image = render_shape(vertices = trans_verts.detach(), faces = self.faces.expand(batch_size, -1, -1), 
+            shape_image = render_shape(vertices = trans_verts.detach(), faces = self.faces.expand(batch_size, -1, -1),
                                     image_size=self.image_size, background=background)
             output['shape_image'] = shape_image
             if self.cfg.use_outer_mesh:
-                shape_image_outer = render_shape(vertices = trans_verts_outer.detach(), faces = self.faces.expand(batch_size, -1, -1), 
+                shape_image_outer = render_shape(vertices = trans_verts_outer.detach(), faces = self.faces.expand(batch_size, -1, -1),
                                     image_size=self.image_size, background=background)
                 output['shape_outer_image'] = shape_image_outer
             return output
         if renderDepth:
             depth_verts = trans_verts.clone().detach()
             depth_verts[...,-1] = depth_verts[...,-1] + 10.
-            depth_image, vis_image = pytorch3d_rasterize(vertices = depth_verts, faces = self.faces.expand(batch_size, -1, -1), image_size=self.image_size, 
+            depth_image, vis_image = pytorch3d_rasterize(vertices = depth_verts, faces = self.faces.expand(batch_size, -1, -1), image_size=self.image_size,
                             blur_radius = 0.)
             depth_image = (depth_image - 10.)*vis_image
             output['depth_image'] = depth_image
             output['vis_image'] = vis_image
 
-        ## render 
+        ## render
         trans_verts[:,:,:2] = -trans_verts[:,:,:2]
         trans_verts[:,:,2] = trans_verts[:,:,2] + 10
         faces = self.faces.unsqueeze(0).expand(batch_size,-1,-1)
@@ -554,7 +554,7 @@ class SCARF(nn.Module):
             textures = TexturesVertex(verts_features=tex)
         )
         silhouette = self.silhouette_renderer(meshes_world=mesh).permute(0, 3, 1, 2)[:,3:]
-        
+
         # image render
         trans_verts[:,:,:2] = -trans_verts[:,:,:2]
         trans_verts[:,:,2] = trans_verts[:,:,2] + 10
@@ -566,7 +566,7 @@ class SCARF(nn.Module):
         if self.cfg.dataset.white_bg:
             image = image[:,:3]*alpha_image + torch.ones_like(alpha_image)*(1-alpha_image)
         else:
-            image = image[:,:3]*alpha_image 
+            image = image[:,:3]*alpha_image
         output['mesh_mask'] = silhouette
         output['mesh_image'] = image
         output['mesh'] = mesh
@@ -574,7 +574,7 @@ class SCARF(nn.Module):
         output['mesh_tex'] = tex
 
         return output
-                
+
     def forward(self, batch, train=False, render_cloth=False, render_shape=False, render_background=False):
         batch_size = batch['cam'].shape[0]
         opdict = {}
@@ -583,7 +583,7 @@ class SCARF(nn.Module):
         else:
             background = torch.ones([batch_size, 3, self.image_size, self.image_size], device=self.device)
         ## render inside body if using hybrid representation
-        if self.cfg.use_mesh: 
+        if self.cfg.use_mesh:
             mesh_out = self.forward_mesh(batch, renderDepth=True, renderShape=render_shape, background=background)
         else:
             mesh_out = self.forward_mesh(batch, returnVerts=True)
@@ -648,7 +648,7 @@ class SCARF(nn.Module):
                     nerf_out_image['nerf_fine_hybrid_image'] = nerf_mask * nerf_image + (1-nerf_mask) * shape_image
             opdict.update(nerf_out_image)
         return opdict
-    
+
     def canonical_normal(self, use_fine=False):
         # normal
         epsilon = 0.01
@@ -660,4 +660,3 @@ class SCARF(nn.Module):
         points_normal = points_normal / (torch.norm(points_normal, p=2, dim=-1, keepdim=True) + 1e-5)
         points_neighbs_normal = points_neighbs_normal / (torch.norm(points_neighbs_normal, p=2, dim=-1, keepdim=True) + 1e-5)
         return points_normal, points_neighbs_normal
-        
