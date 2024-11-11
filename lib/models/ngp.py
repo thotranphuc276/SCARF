@@ -163,8 +163,8 @@ class NGPradianceField(torch.nn.Module):
             )
 
     def query_density(self, x, return_feat: bool = False):
-        ''' 
-        x range: [-0.5, 0.5] 
+        '''
+        x range: [-0.5, 0.5]
         y range: [0.4, 0.7]
         z range: [-0.5, 0.3]
         '''
@@ -234,7 +234,7 @@ class NGPNet(torch.nn.Module):
     def __init__(
         self,
         aabb: Union[torch.Tensor, List[float]],
-        input_dim: int = 3, 
+        input_dim: int = 3,
         cond_dim: int = 0,
         output_dim: int = 3,
         last_op: Callable = torch.sigmoid,
@@ -251,7 +251,8 @@ class NGPNet(torch.nn.Module):
         self.output_dim = output_dim
         self.last_op = last_op
         self.scale = scale
-        
+        self.cond_dim = cond_dim
+
         per_level_scale = float(np.exp2(np.log2(2048 * aabb[0].abs() / 16.) / (16. - 1.)))
 
         self.encoder = tcnn.Encoding(
@@ -290,10 +291,10 @@ class NGPNet(torch.nn.Module):
                 "n_hidden_layers": 1,
             },
         )
-        
+
     def forward(self, x, cond=None):
-        ''' 
-        x range: [-0.5, 0.5] 
+        '''
+        x range: [-0.5, 0.5]
         y range: [0.4, 0.7]
         z range: [-0.5, 0.3]
         '''
@@ -301,12 +302,11 @@ class NGPNet(torch.nn.Module):
         x = (x - aabb_min) / (aabb_max - aabb_min)
         # selector = ((x > 0.0) & (x < 1.0)).all(dim=-1)
         x_enc = self.encoder(x.view(-1, self.input_dim))
-        if cond is not None:
+        if cond is not None and self.cond_dim > 0:
             cond = (cond - aabb_min) / (aabb_max - aabb_min)
             cond_enc = self.cond_encoder(cond.view(-1, cond.shape[-1]))
-            x_enc = torch.cat([x_enc, cond_enc], dim=-1)     
+            x_enc = torch.cat([x_enc, cond_enc], dim=-1)
         x = self.mlp(x_enc).view(list(x.shape[:-1]) + [self.output_dim]).to(x)
         x = self.last_op(x)*self.scale
         return x
-    
-    
+
