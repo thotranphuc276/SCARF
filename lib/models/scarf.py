@@ -74,6 +74,8 @@ class SCARF(nn.Module):
             init_aabb = [-1., -1., -1., 1., 1., 1.]
             self.mlp_geo = NGPNet(aabb=init_aabb, input_dim=3, cond_dim=0, output_dim=3, last_op=torch.tanh, scale=self.cfg.mesh_offset_scale,
                                     log2_hashmap_size=8, n_levels=8)
+            self.mlp_tex = NGPNet(aabb=init_aabb, input_dim=3, cond_dim=0, output_dim=3, last_op=torch.nn.GELU(), scale=1,
+                                    log2_hashmap_size=8, n_levels=8)
             # setup renderer for mesh
             self._setup_render()
 

@@ -1,13 +1,12 @@
-from skimage.transform import rescale, resize, downscale_local_mean
-from skimage.io import imread
-import cv2
+import os
 import pickle
-from tqdm import tqdm
+from glob import glob
+
 import numpy as np
 import torch
-import os
-from glob import glob
-from ..utils import rotation_converter
+from skimage.io import imread
+from skimage.transform import resize
+
 
 class NerfDataset(torch.utils.data.Dataset):
     """SCARF Dataset"""
@@ -17,7 +16,7 @@ class NerfDataset(torch.utils.data.Dataset):
         subject = cfg.subjects[0]
         imagepath_list = []
         self.dataset_path = os.path.join(cfg.path, subject)
-        if not os.path.exists (self.dataset_path):
+        if not os.path.exists(self.dataset_path):
             print(f'{self.dataset_path} not exists, please check the data path')
             exit()
         imagepath_list = glob(os.path.join(self.dataset_path, 'image', f'{subject}_*.png'))
@@ -29,7 +28,7 @@ class NerfDataset(torch.utils.data.Dataset):
         self.beta_cache_path = os.path.join(root_dir, 'beta.pt')
         self.subject_id = subject
 
-        imagepath_list = sorted(imagepath_list) 
+        imagepath_list = sorted(imagepath_list)
         frame_start = getattr(cfg, mode).frame_start
         frame_end = getattr(cfg, mode).frame_end
         frame_step = getattr(cfg, mode).frame_step
@@ -42,7 +41,7 @@ class NerfDataset(torch.utils.data.Dataset):
 
         self.image_size = cfg.image_size
         self.white_bg = cfg.white_bg
-        
+
     def __len__(self):
         return len(self.data)
 
@@ -75,7 +74,7 @@ class NerfDataset(torch.utils.data.Dataset):
         frame_id = int(imagename.split('_f')[-1])
         name = self.subject_id
 
-        # load pickle 
+        # load pickle
         pkl_file = os.path.join(self.dataset_path, 'pixie', f'{imagename}_param.pkl')
         with open(pkl_file, 'rb') as f:
             codedict = pickle.load(f)
@@ -87,13 +86,13 @@ class NerfDataset(torch.utils.data.Dataset):
                 param_dict[key] = torch.from_numpy(codedict[key])
         beta = param_dict['shape'].squeeze()[:10]
         # full_pose = param_dict['full_pose'].squeeze()
-        jaw_pose = torch.eye(3, dtype=torch.float32).unsqueeze(0) #param_dict['jaw_pose']
-        eye_pose = torch.eye(3, dtype=torch.float32).unsqueeze(0).repeat(2,1,1)
+        jaw_pose = torch.eye(3, dtype=torch.float32).unsqueeze(0)  # param_dict['jaw_pose']
+        eye_pose = torch.eye(3, dtype=torch.float32).unsqueeze(0).repeat(2, 1, 1)
         # hand_pose = torch.eye(3, dtype=torch.float32).unsqueeze(0).repeat(15,1,1)
         full_pose = torch.cat([param_dict['global_pose'], param_dict['body_pose'],
-                            jaw_pose, eye_pose, 
-                            # hand_pose, hand_pose], dim=0)        
-                            param_dict['left_hand_pose'], param_dict['right_hand_pose']], dim=0)   
+                               jaw_pose, eye_pose,
+                               # hand_pose, hand_pose], dim=0)
+                               param_dict['left_hand_pose'], param_dict['right_hand_pose']], dim=0)
         cam = param_dict['body_cam'].squeeze()
         exp = torch.zeros_like(param_dict['exp'].squeeze()[:10])
         frame_id = f'{frame_id:06}'
@@ -109,11 +108,11 @@ class NerfDataset(torch.utils.data.Dataset):
             'beta': beta,
             'exp': exp
         }
-       
+
         seg_image_path = os.path.join(self.dataset_path, 'cloth_segmentation', f"{imagename}.png")
-        cloth_seg = imread(seg_image_path)/255.
+        cloth_seg = imread(seg_image_path) / 255.
         cloth_seg = resize(cloth_seg, [self.image_size, self.image_size])
-        cloth_mask = torch.from_numpy(cloth_seg[:,:,:3].sum(-1))[None,...]
+        cloth_mask = torch.from_numpy(cloth_seg[:, :, :3].sum(-1))[None, ...]
         cloth_mask = (cloth_mask > 0.1).float()
         cloth_mask = ((mask + cloth_mask) > 1.5).float()
         skin_mask = ((mask - cloth_mask) > 0).float()
